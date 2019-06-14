@@ -1,14 +1,14 @@
 name:                hasktorch-naperian
 version:             0.1.0.0
--- synopsis:
--- description:
-homepage:            https://github.com/githubuser/hasktorch-naperian#readme
+synopsis:            Integrating Naperian functors with Hasktorch
+description:         Integrating Naperian functors with Hasktorch.
+homepage:            https://github.com/jasigal/hasktorch-naperian#readme
 license:             BSD3
 license-file:        LICENSE
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2019 Author name here
-category:            Web
+author:              Jesse Sigal
+maintainer:          -
+copyright:           2019 Jesse Sigal
+category:            Tensors, Machine Learning, AI, Math
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
@@ -21,4 +21,4 @@ library
 
 source-repository head
   type:     git
-  location: https://github.com/githubuser/hasktorch-naperian
+  location: https://github.com/jasigal/hasktorch-naperian
