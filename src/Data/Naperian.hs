@@ -1,3 +1,4 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -7,6 +8,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
 
 module Data.Naperian where
 
@@ -20,9 +22,17 @@ import           Prelude                 hiding ( lookup
 import           Data.Functor.Product
 import           Data.Functor.Compose
 import           Data.Functor.Classes
+import           Data.Functor.Identity
 import           Data.Foldable
 import           Data.Maybe
 import           Control.Applicative
+import           GHC.TypeLits
+import           GHC.Exts
+
+instance Naperian Identity where
+  type Log Identity = ()
+  positions = Identity ()
+  lookup (Identity x) () = x
 
 instance (Naperian f, Naperian g) => Naperian (Product f g) where
   type Log (Product f g) = Either (Log f) (Log g)
@@ -30,10 +40,16 @@ instance (Naperian f, Naperian g) => Naperian (Product f g) where
   lookup (Pair f g) (Left  x) = lookup f x
   lookup (Pair f g) (Right y) = lookup g y
 
+deriving via (WrappedFiniteNaperian (Product f g)) instance
+  (FiniteNaperian f, FiniteNaperian g, Dimension f, Dimension g) => Dimension (Product f g)
+
 instance (Naperian f, Naperian g) => Naperian (Compose f g) where
   type Log (Compose f g) = (Log f, Log g)
   lookup (Compose fg) (x, y) = lookup (lookup fg x) y
   tabulate h = Compose $ tabulate (\x -> tabulate (\y -> h (x, y)))
+
+deriving via (WrappedFiniteNaperian (Compose f g)) instance
+  (FiniteNaperian f, FiniteNaperian g, Dimension f, Dimension g) => Dimension (Compose f g)
 
 newtype WrappedNaperian f a = WrappedNaperian {unWrappedNaperian :: f a}
   deriving Functor
@@ -98,3 +114,17 @@ instance (Enum a, Enum b, Bounded a, Bounded b) => Enum (Either a b) where
     where bound = fromEnum (maxBound @a)
   fromEnum (Left  x) = fromEnum x
   fromEnum (Right y) = fromEnum (maxBound @a) + 1 + fromEnum y
+
+instance KnownNat n => Bounded (Finite n) where
+  minBound = Fin 0
+  maxBound = Fin ((fromIntegral (natVal' (proxy# :: Proxy# n)) :: Int) - 1)
+
+instance KnownNat n => Enum (Finite n) where
+  toEnum i = fromJust (finite i)
+  fromEnum (Fin i) = i
+
+deriving via (WrappedFiniteNaperian (Vector n)) instance
+  (KnownNat n) => Show1 (Vector n)
+
+deriving via (WrappedFiniteNaperian (Vector n)) instance
+  (KnownNat n) => Eq1 (Vector n)
