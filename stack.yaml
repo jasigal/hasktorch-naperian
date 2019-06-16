@@ -41,6 +41,8 @@ packages:
 extra-deps:
   - github: idontgetoutmuch/Naperian
     commit: 54d873ffe99de865ca34e6bb3b92736e29e01619
+    size: 7146
+    sha256: b656cac6fbed9982514675ff1780c50e261a53673d25c4d3ed7b6957f334b6ea
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
