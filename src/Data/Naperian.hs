@@ -10,6 +10,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
 
+{-|
+Module      : Data.Naperian
+Description : Instances for Naperian functors and finite Naperian functors.
+Copyright   : (c) Jesse Sigal, 2019
+
+Instances and wrapper classes for Naperian and finite Naperian functors.
+-}
+
 module Data.Naperian where
 
 import           Naperian                hiding ( Pair )
@@ -59,7 +67,7 @@ deriving via (WrappedFiniteNaperian (Compose f g)) instance
   (FiniteNaperian f, FiniteNaperian g, Dimension f, Dimension g) => Dimension (Compose f g)
 
 -- | A newtype wrapper around a Naperian functor for automatically deriving
--- instances using 'DerivingVia'.
+-- instances using @DerivingVia@.
 newtype WrappedNaperian f a = WrappedNaperian {unWrappedNaperian :: f a}
   deriving Functor
 
@@ -79,7 +87,7 @@ instance Naperian f => Applicative (WrappedNaperian f) where
 type FiniteNaperian f = (Naperian f, Enum (Log f), Bounded (Log f))
 
 -- | A newtype wrapper around a finite Naperian functor for automatically
--- deriving instances using 'DerivingVia'.
+-- deriving instances using @DerivingVia@.
 newtype WrappedFiniteNaperian f a = WrappedFiniteNaperian {unWrappedFiniteNaperian :: f a}
   deriving Functor
   deriving (Naperian, Applicative) via (WrappedNaperian f)
@@ -118,8 +126,8 @@ instance FiniteNaperian f => Show1 (WrappedFiniteNaperian f) where
 -- | We cannot use 'DerivingVia' to derive a 'Traversable' instance for finite
 -- Naperian functors. Essentially, 'DerivingVia' works using the 'Coercible'
 -- type class and its member @coerce@. Tyring to deriving 'Traversable' will
--- attempt to use @coerce@ under the 'Applicative' functor 'f'. However, this
--- is only valid if 'f's argument has a nominal role, which is not guarunteed
+-- attempt to use @coerce@ under the 'Applicative' functor @f@. However, this
+-- is only valid if @f@s argument has a nominal role, which is not guarunteed
 -- in the signature. For a more detailed explanation, see
 -- <https://ryanglscott.github.io/2018/06/22/quantifiedconstraints-and-the-trouble-with-traversable/ here>.
 traverseFinNap
