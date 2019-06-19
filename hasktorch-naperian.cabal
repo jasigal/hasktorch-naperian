@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Data.Naperian
                      , Data.Naperian.Examples
+                     , Data.Hybrid
                      , Torch.Naperian
                      , Torch.Naperian.Examples
   build-depends:       base >= 4.7 && < 5
