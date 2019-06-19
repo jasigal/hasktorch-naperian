@@ -20,6 +20,7 @@ addBias = liftA2 (+)
 concatenate :: (Functor f, Functor g) => f a -> g a -> Product f g a
 concatenate = Pair
 
+{-# ANN window "HLint: ignore Eta reduce" #-}
 window
   :: (Functor f, Functor g, Functor h)
   => (g a -> a)
@@ -28,6 +29,7 @@ window
   -> h a
 window reduce spec input = fmap reduce . getCompose . spec $ input
 
+{-# ANN convolve "HLint: ignore Eta reduce" #-}
 convolve
   :: (Num a, Functor f, Dimension g, Functor h)
   => g a
