@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-|
 Module      : Data.Naperian
@@ -43,6 +45,9 @@ instance Naperian Identity where
   positions = Identity ()
   lookup (Identity x) () = x
 
+instance FiniteNaperian Identity where
+  type Size Identity = 1
+
 -- | When @f@ and @g@ are Naperian functors, then so is @'Product' f g@ with
 -- log @('Log' f) + ('Log' g)@.
 instance (Naperian f, Naperian g) => Naperian (Product f g) where
@@ -51,9 +56,9 @@ instance (Naperian f, Naperian g) => Naperian (Product f g) where
   lookup (Pair f g) (Left  x) = lookup f x
   lookup (Pair f g) (Right y) = lookup g y
 
--- | A 'Product' of finite Naperian functors is automatically a 'Dimension'.
-deriving via (WrappedFiniteNaperian (Product f g)) instance
-  (FiniteNaperian f, FiniteNaperian g, Dimension f, Dimension g) => Dimension (Product f g)
+-- | A 'Product' of finite Naperian functors is finite.
+instance (FiniteNaperian f, FiniteNaperian g) => FiniteNaperian (Product f g) where
+  type Size (Product f g) = Size f + Size g
 
 -- | When @f@ and @g@ are Naperian functors, then so is @'Compose' f g@ with
 -- log @('Log' f) * ('Log' g)@.
@@ -62,9 +67,9 @@ instance (Naperian f, Naperian g) => Naperian (Compose f g) where
   lookup (Compose fg) (x, y) = lookup (lookup fg x) y
   tabulate h = Compose $ tabulate (\x -> tabulate (\y -> h (x, y)))
 
--- | A 'Product' of finite Naperian functors is automatically a 'Dimension'.
-deriving via (WrappedFiniteNaperian (Compose f g)) instance
-  (FiniteNaperian f, FiniteNaperian g, Dimension f, Dimension g) => Dimension (Compose f g)
+-- | A 'Product' of finite Naperian functors is finite.
+instance (FiniteNaperian f, FiniteNaperian g) => FiniteNaperian (Compose f g) where
+  type Size (Compose f g) = Size f GHC.TypeLits.* Size g
 
 -- | A newtype wrapper around a Naperian functor for automatically deriving
 -- instances using @DerivingVia@.
@@ -82,15 +87,22 @@ instance Naperian f => Applicative (WrappedNaperian f) where
   pure x = tabulate (const x)
   fs <*> xs = tabulate (\i -> lookup fs i (lookup xs i))
 
--- | Constraints for the class of Naperian functors which are represented by
--- a finite type.
-type FiniteNaperian f = (Naperian f, Enum (Log f), Bounded (Log f))
+-- | The class of Naperian functors which are represented by a finite type.
+class (Naperian f, Enum (Log f), Bounded (Log f), KnownNat (Size f)) => FiniteNaperian f where
+  -- | The static size of a FiniteNaperian functor as a type-level natural.
+  type Size f :: Nat
 
 -- | A newtype wrapper around a finite Naperian functor for automatically
 -- deriving instances using @DerivingVia@.
 newtype WrappedFiniteNaperian f a = WrappedFiniteNaperian {unWrappedFiniteNaperian :: f a}
   deriving Functor
   deriving (Naperian, Applicative) via (WrappedNaperian f)
+
+instance FiniteNaperian f => FiniteNaperian (WrappedFiniteNaperian f) where
+  type Size (WrappedFiniteNaperian f) = Size f
+
+instance KnownNat n => FiniteNaperian (Vector n) where
+  type Size (Vector n) = n
 
 -- | All finite Naperian functors can be giving a 'Foldable' instance by using
 -- the list instance.
@@ -104,7 +116,7 @@ instance FiniteNaperian f => Traversable (WrappedFiniteNaperian f) where
 
 -- | All finite Naperian functors trivially have a 'Dimension' instance.
 instance FiniteNaperian f => Dimension (WrappedFiniteNaperian f) where
-  size _ = fromEnum (maxBound @(Log f)) + 1
+  size _ = fromIntegral (natVal' (proxy# :: Proxy# (Size f))) :: Int
 
 -- | All finite Naperian functors have 'Eq1' instances by working pointwise.
 instance FiniteNaperian f => Eq1 (WrappedFiniteNaperian f) where
@@ -131,12 +143,21 @@ instance FiniteNaperian f => Show1 (WrappedFiniteNaperian f) where
 -- in the signature. For a more detailed explanation, see
 -- <https://ryanglscott.github.io/2018/06/22/quantifiedconstraints-and-the-trouble-with-traversable/ here>.
 traverseFinNap
-  :: (FiniteNaperian t, Foldable t, Applicative f)
+  :: forall a b f t
+   . (FiniteNaperian t, Foldable t, Applicative f)
   => (a -> f b)
   -> t a
   -> f (t b)
-traverseFinNap f = fmap fromList . Prelude.traverse f . Data.Foldable.toList
-  where fromList xs = tabulate (\i -> xs !! fromEnum i)
+traverseFinNap f = fmap fromVector . Prelude.traverse f . toVector
+ where
+  toVector t =
+    case
+        Naperian.fromList (Data.Foldable.toList t) :: Maybe (Vector (Size t) a)
+      of
+        Nothing  -> error "t-shaped data should have (Size t) elements."
+        Just vec -> vec
+  fromVector vec =
+    tabulate (\i -> vec `index` (fromJust . finite $ fromEnum i))
 
 -- | A lexicographic enumeration for pairs.
 instance (Enum a, Enum b, Bounded a, Bounded b) => Enum (a, b) where

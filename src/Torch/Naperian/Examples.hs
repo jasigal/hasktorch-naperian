@@ -38,6 +38,7 @@ type I = Identity
 -- @f@-shape of slopes @m@ and a bias @c@ for the model @y = (m . x) + c@.
 newtype LinearModel f a = LinearModel {unLinearModel :: Product f I a}
   deriving (Show, Eq, Functor, Naperian)
+deriving instance FiniteNaperian f => FiniteNaperian (LinearModel f)
 deriving via (WrappedNaperian (LinearModel f)) instance
   (Naperian f) => Applicative (LinearModel f)
 deriving via (WrappedFiniteNaperian (LinearModel f)) instance
@@ -50,6 +51,7 @@ deriving via (WrappedFiniteNaperian (LinearModel f)) instance
 -- | A sample of an @f@-shape input and a scalar output.
 newtype Sample f a = Sample {unSample :: Product f I a}
   deriving (Show, Eq, Functor, Naperian)
+deriving instance FiniteNaperian f => FiniteNaperian (Sample f)
 deriving via (WrappedNaperian (Sample f)) instance
   (Naperian f) => Applicative (Sample f)
 deriving via (WrappedFiniteNaperian (Sample f)) instance
@@ -66,6 +68,7 @@ deriving via (WrappedFiniteNaperian (Sample f)) instance
 -- | A @g@-shape amount of @f@-shape samples.
 newtype Samples g f a = Samples {unSamples :: Compose g (Sample f) a}
   deriving (Functor, Naperian)
+deriving instance (FiniteNaperian f, FiniteNaperian g) => FiniteNaperian (Samples g f)
 deriving instance (FiniteNaperian f, Show1 g) => Show1 (Samples g f)
 instance (Show1 (Samples g f), Show a) => Show (Samples g f a) where
   showsPrec = showsPrec1
@@ -96,6 +99,7 @@ totalError (Samples (Compose samples)) (LinearModel model) = sum
     in  (output - (inner input slopes + intercept)) ^ 2
 
 -- | Use gradient descent on MSE to produce a stream of more accurate models.
+{-# ANN fitModel "HLint: ignore Eta reduce" #-}
 fitModel
   :: (Fractional a, Ord a, Dimension f, FiniteNaperian f, Dimension g)
   => Samples g f a
