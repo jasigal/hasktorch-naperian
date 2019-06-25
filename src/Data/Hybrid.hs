@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Data.HybridCorrupt where
+module Data.Hybrid where
 
 import           GHC.TypeLits
 import           Data.Type.Bool
