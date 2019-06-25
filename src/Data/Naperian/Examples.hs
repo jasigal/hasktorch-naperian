@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 
 module Data.Naperian.Examples where
 
@@ -20,12 +21,14 @@ data Triple a = Triple a a a
   deriving (Foldable, Dimension, Eq1, Ord1, Show1) via (WrappedFiniteNaperian Triple)
 instance Traversable Triple where
   traverse = traverseFinNap
+instance FiniteNaperian Triple where
+  type Size Triple = 3
 
 data Three = Zero | One | Two
   deriving (Show, Eq, Enum, Bounded)
 
 newtype Nonuple a = Nonuple {unNonuple :: Compose Triple Triple a}
-  deriving (Show, Eq, Functor, Naperian)
+  deriving (Show, Eq, Functor, Naperian, FiniteNaperian)
   deriving Applicative via (WrappedNaperian Nonuple)
   deriving (Foldable, Dimension, Eq1, Ord1) via (WrappedFiniteNaperian Nonuple)
 instance Traversable Nonuple where
