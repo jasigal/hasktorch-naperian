@@ -161,9 +161,15 @@ traverseFinNap f = fmap fromVector . Prelude.traverse f . toVector
 
 -- | A lexicographic enumeration for pairs.
 instance (Enum a, Enum b, Bounded a, Bounded b) => Enum (a, b) where
-  toEnum i = (toEnum @a (i `div` bound), toEnum @b (i `mod` bound))
+  toEnum i
+    | fromEnum (maxBound @a) == 0 = (minBound, toEnum i) -- single element type
+    | fromEnum (maxBound @b) == 0 = (toEnum i, minBound) -- single element type
+    | otherwise = (toEnum @a (i `div` bound), toEnum @b (i `mod` bound))
     where bound = fromEnum (maxBound @a) + 1
-  fromEnum (x, y) = fromEnum y + ((fromEnum (maxBound @a) + 1) * fromEnum x)
+  fromEnum (x, y)
+    | fromEnum (maxBound @a) == 0 = fromEnum y -- single element type
+    | fromEnum (maxBound @b) == 0 = fromEnum x -- single element type
+    | otherwise = fromEnum y + ((fromEnum (maxBound @a) + 1) * fromEnum x)
 
 -- | A bound for sums where the left is ordered below the right.
 instance (Bounded a, Bounded b) => Bounded (Either a b) where
