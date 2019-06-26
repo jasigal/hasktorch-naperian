@@ -22,6 +22,7 @@ import           Data.Proxy (Proxy(..))
 import           Data.Kind (Type, Constraint)
 import           Data.Type.Equality
 import           Type.Reflection
+import           Data.Constraint
 import           Naperian
 
 -- DType singleton
@@ -37,9 +38,6 @@ instance DType Double where
 
 instance DType Int where
   dtype = DTypeInt
-
-data Dict ctxt where
-  Dict :: ctxt => Dict ctxt
 
 checkDType :: forall a. Typeable a => Maybe (Dict (DType a))
 checkDType

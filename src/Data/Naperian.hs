@@ -11,6 +11,9 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 {-|
 Module      : Data.Naperian
@@ -22,7 +25,9 @@ Instances and wrapper classes for Naperian and finite Naperian functors.
 
 module Data.Naperian where
 
-import           Naperian                hiding ( Pair )
+import           Naperian                hiding ( Pair
+                                                , Hyper(..)
+                                                )
 import qualified Prelude
 import           Prelude                 hiding ( lookup
                                                 , length
@@ -38,6 +43,20 @@ import           Data.Maybe
 import           Control.Applicative
 import           GHC.TypeLits
 import           GHC.Exts
+import           Data.Kind                      ( Type )
+
+--------------------------------------------------------------------------------
+-- Finite Naperian functors.
+--------------------------------------------------------------------------------
+
+-- | The class of Naperian functors which are represented by a finite type.
+class (Naperian f, Enum (Log f), Bounded (Log f), KnownNat (Size f)) => FiniteNaperian f where
+  -- | The static size of a FiniteNaperian functor as a type-level natural.
+  type Size f :: Nat
+
+--------------------------------------------------------------------------------
+-- Instances for basic buidling blocks.
+--------------------------------------------------------------------------------
 
 -- | The 'Identity' functor is Naperian with log @()@.
 instance Naperian Identity where
@@ -71,6 +90,10 @@ instance (Naperian f, Naperian g) => Naperian (Compose f g) where
 instance (FiniteNaperian f, FiniteNaperian g) => FiniteNaperian (Compose f g) where
   type Size (Compose f g) = Size f GHC.TypeLits.* Size g
 
+--------------------------------------------------------------------------------
+-- Newtype wrappers for DerivingVia with Naperians.
+--------------------------------------------------------------------------------
+
 -- | A newtype wrapper around a Naperian functor for automatically deriving
 -- instances using @DerivingVia@.
 newtype WrappedNaperian f a = WrappedNaperian {unWrappedNaperian :: f a}
@@ -87,10 +110,9 @@ instance Naperian f => Applicative (WrappedNaperian f) where
   pure x = tabulate (const x)
   fs <*> xs = tabulate (\i -> lookup fs i (lookup xs i))
 
--- | The class of Naperian functors which are represented by a finite type.
-class (Naperian f, Enum (Log f), Bounded (Log f), KnownNat (Size f)) => FiniteNaperian f where
-  -- | The static size of a FiniteNaperian functor as a type-level natural.
-  type Size f :: Nat
+--------------------------------------------------------------------------------
+-- Newtype wrappers for DerivingVia with FiniteNaperian.
+--------------------------------------------------------------------------------
 
 -- | A newtype wrapper around a finite Naperian functor for automatically
 -- deriving instances using @DerivingVia@.
@@ -159,17 +181,25 @@ traverseFinNap f = fmap fromVector . Prelude.traverse f . toVector
   fromVector vec =
     tabulate (\i -> vec `index` (fromJust . finite $ fromEnum i))
 
+--------------------------------------------------------------------------------
+-- Auxiliary Enum and Bounded instances needed for FiniteNaperian instances of
+-- basic building blocks.
+--------------------------------------------------------------------------------
+
 -- | A lexicographic enumeration for pairs.
 instance (Enum a, Enum b, Bounded a, Bounded b) => Enum (a, b) where
-  toEnum i
-    | fromEnum (maxBound @a) == 0 = (minBound, toEnum i) -- single element type
-    | fromEnum (maxBound @b) == 0 = (toEnum i, minBound) -- single element type
-    | otherwise = (toEnum @a (i `div` bound), toEnum @b (i `mod` bound))
+  toEnum i | fromEnum (maxBound @a) == 0 = (minBound, toEnum i)
+           | -- single element type
+             fromEnum (maxBound @b) == 0 = (toEnum i, minBound)
+           | -- single element type
+             otherwise = (toEnum @a (i `div` bound), toEnum @b (i `mod` bound))
     where bound = fromEnum (maxBound @a) + 1
   fromEnum (x, y)
-    | fromEnum (maxBound @a) == 0 = fromEnum y -- single element type
-    | fromEnum (maxBound @b) == 0 = fromEnum x -- single element type
-    | otherwise = fromEnum y + ((fromEnum (maxBound @a) + 1) * fromEnum x)
+    | fromEnum (maxBound @a) == 0 = fromEnum y
+    | -- single element type
+      fromEnum (maxBound @b) == 0 = fromEnum x
+    | -- single element type
+      otherwise = fromEnum y + ((fromEnum (maxBound @a) + 1) * fromEnum x)
 
 -- | A bound for sums where the left is ordered below the right.
 instance (Bounded a, Bounded b) => Bounded (Either a b) where
@@ -184,6 +214,10 @@ instance (Enum a, Enum b, Bounded a, Bounded b) => Enum (Either a b) where
   fromEnum (Left  x) = fromEnum x
   fromEnum (Right y) = fromEnum (maxBound @a) + 1 + fromEnum y
 
+--------------------------------------------------------------------------------
+-- Vector related instances.
+--------------------------------------------------------------------------------
+
 instance KnownNat n => Bounded (Finite n) where
   minBound = Fin 0
   maxBound = Fin ((fromIntegral (natVal' (proxy# :: Proxy# n)) :: Int) - 1)
@@ -197,3 +231,162 @@ deriving via (WrappedFiniteNaperian (Vector n)) instance
 
 deriving via (WrappedFiniteNaperian (Vector n)) instance
   (KnownNat n) => Eq1 (Vector n)
+
+--------------------------------------------------------------------------------
+-- FiniteNaperian version of Hyper.
+--------------------------------------------------------------------------------
+
+type family All (pred :: a -> Constraint) (l :: [a]) :: Constraint where
+  All _    '[]      = ()
+  All pred (h ': t) = (pred h, All pred t)
+
+type family MapLog (l :: [a]) :: [b] where
+  MapLog '[]      = '[]
+  MapLog (x : xs) = Log x : MapLog xs
+
+type family Prod (ns :: [Nat]) :: Nat where
+  Prod '[]      = 0
+  Prod (n : ns) = n GHC.TypeLits.* Prod ns
+
+data FiniteHyper :: [Type -> Type] -> Type -> Type where
+  Scalar :: a -> FiniteHyper '[] a
+  Prism :: (FiniteNaperian f, All FiniteNaperian fs) => FiniteHyper fs (f a) -> FiniteHyper (f : fs) a
+
+point' :: FiniteHyper '[] a -> a
+point' (Scalar a) = a
+
+crystal' :: FiniteHyper (f : fs) a -> FiniteHyper fs (f a)
+crystal' (Prism x) = x
+
+data HList :: [Type] -> Type where
+  HNil :: HList '[]
+  HCons :: a -> HList as -> HList (a : as)
+
+instance Eq (HList '[]) where
+  _ == _ = True
+instance (Eq a, Eq (HList as)) => Eq (HList (a : as)) where
+  (HCons x xs) == (HCons y ys) = (x == y) && (xs == ys)
+
+instance Show (HList '[]) where
+  show _ = "HNil"
+instance (Show a, Show (HList as)) => Show (HList (a : as)) where
+  show (HCons a as) = show a ++ " <: " ++ show as
+
+instance Bounded (HList '[]) where
+  minBound = HNil
+  maxBound = HNil
+instance (Bounded a, Bounded (HList as)) => Bounded (HList (a : as)) where
+  minBound = HCons minBound minBound
+  maxBound = HCons maxBound maxBound
+
+instance Enum (HList '[]) where
+  toEnum 0 = HNil
+  fromEnum HNil = 0
+instance (Bounded a, Bounded (HList as), Enum a, Enum (HList as)) => Enum (HList (a : as)) where
+  toEnum i
+    | fromEnum (maxBound @a) == 0 = HCons minBound (toEnum i)
+    | -- single element type
+      fromEnum (maxBound @(HList as)) == 0 = HCons (toEnum i) minBound
+    |   -- single element type
+      otherwise = HCons (toEnum @a (i `div` bound))
+                        (toEnum @(HList as) (i `mod` bound))
+    where bound = fromEnum (maxBound @a) + 1
+  fromEnum (HCons x y)
+    | fromEnum (maxBound @a) == 0 = fromEnum y
+    | -- single element type
+      fromEnum (maxBound @(HList as)) == 0 = fromEnum x
+    | -- single element type
+      otherwise = fromEnum y + ((fromEnum (maxBound @a) + 1) * fromEnum x)
+
+--------------------------------------------------------------------------------
+-- Instances for FiniteHyper
+--------------------------------------------------------------------------------
+
+instance Show1 (FiniteHyper '[]) where
+  liftShowsPrec sp _ d (Scalar a) = sp d a
+instance (Show1 f, Show1 (FiniteHyper fs)) => Show1 (FiniteHyper (f : fs)) where
+  liftShowsPrec sp sl d (Prism fa) = liftShowsPrec sp' sl' d fa
+   where
+    sp' = liftShowsPrec sp sl
+    sl' = liftShowList sp sl
+
+instance Show a => Show (FiniteHyper '[] a) where
+  showsPrec = showsPrec1
+instance (Show1 f, Show1 (FiniteHyper fs), Show a) => Show (FiniteHyper (f : fs) a) where
+  showsPrec = showsPrec1
+
+instance Functor (FiniteHyper fs) where
+  fmap f (Scalar x) = Scalar (f x)
+  fmap f (Prism  x) = Prism ((fmap . fmap) f x)
+
+instance Naperian (FiniteHyper '[]) where
+  type Log (FiniteHyper '[]) = HList '[]
+  positions = Scalar HNil
+  lookup (Scalar x) _ = x
+instance ( FiniteNaperian f
+         , All FiniteNaperian fs
+         , FiniteNaperian (FiniteHyper fs)
+         , Log (FiniteHyper fs) ~ HList (MapLog fs)
+         ) => Naperian (FiniteHyper (f : fs)) where
+  type Log (FiniteHyper (f : fs)) = HList (Log f : MapLog fs)
+  lookup (Prism xs) (HCons i is) = lookup (lookup xs is) i
+  tabulate h = Prism $ tabulate (\x -> tabulate (\y -> h (HCons y x)))
+
+instance FiniteNaperian (FiniteHyper '[]) where
+  type Size (FiniteHyper '[]) = 1
+instance ( FiniteNaperian f
+         , All FiniteNaperian fs
+         , FiniteNaperian (FiniteHyper fs)
+         , Log (FiniteHyper fs) ~ HList (MapLog fs)
+         ) => FiniteNaperian (FiniteHyper (f : fs)) where
+  type Size (FiniteHyper (f : fs)) = Size f GHC.TypeLits.* Size (FiniteHyper fs)
+
+deriving via (WrappedNaperian (FiniteHyper '[])) instance Applicative (FiniteHyper '[])
+deriving via (WrappedNaperian (FiniteHyper (f : fs))) instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Applicative (FiniteHyper (f : fs))
+
+deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Foldable (FiniteHyper '[])
+deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Foldable (FiniteHyper (f : fs))
+
+instance Traversable (FiniteHyper '[]) where
+  traverse = traverseFinNap
+instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Traversable (FiniteHyper (f : fs)) where
+  traverse = traverseFinNap
+
+deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Dimension (FiniteHyper '[])
+deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Dimension (FiniteHyper (f : fs))
+
+deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Eq1 (FiniteHyper '[])
+deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Eq1 (FiniteHyper (f : fs))
+
+deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Ord1 (FiniteHyper '[])
+deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
+  ( FiniteNaperian f
+  , All FiniteNaperian fs
+  , FiniteNaperian (FiniteHyper fs)
+  , Log (FiniteHyper fs) ~ HList (MapLog fs)
+  ) => Ord1 (FiniteHyper (f : fs))
