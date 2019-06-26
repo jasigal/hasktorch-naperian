@@ -25,7 +25,7 @@ library
                      , ad
                      , singleton-bool
                      , ghc-typelits-knownnat
-                     , constraint
+                     , constraints == 0.11
   ghc-options:         -fplugin GHC.TypeLits.KnownNat.Solver
   default-language:    Haskell2010
 

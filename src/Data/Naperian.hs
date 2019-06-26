@@ -14,6 +14,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 {-|
 Module      : Data.Naperian
@@ -157,6 +158,16 @@ instance FiniteNaperian f => Show1 (WrappedFiniteNaperian f) where
       . shwL (Data.Foldable.toList xs)
       . showChar '>'
 
+fromVector :: (n ~ Size f, FiniteNaperian f) => Vector n a -> f a
+fromVector vec = tabulate (\i -> vec `index` (fromJust . finite $ fromEnum i))
+
+toVector :: (n ~ Size f, FiniteNaperian f) => f a -> Vector n a
+toVector fa =
+  case
+      Naperian.fromList (Data.Foldable.toList $ WrappedFiniteNaperian fa)
+    of
+      Nothing  -> error "t-shaped data should have (Size t) elements."
+      Just vec -> vec
 -- | We cannot use 'DerivingVia' to derive a 'Traversable' instance for finite
 -- Naperian functors. Essentially, 'DerivingVia' works using the 'Coercible'
 -- type class and its member @coerce@. Tyring to deriving 'Traversable' will
@@ -171,15 +182,6 @@ traverseFinNap
   -> t a
   -> f (t b)
 traverseFinNap f = fmap fromVector . Prelude.traverse f . toVector
- where
-  toVector t =
-    case
-        Naperian.fromList (Data.Foldable.toList t) :: Maybe (Vector (Size t) a)
-      of
-        Nothing  -> error "t-shaped data should have (Size t) elements."
-        Just vec -> vec
-  fromVector vec =
-    tabulate (\i -> vec `index` (fromJust . finite $ fromEnum i))
 
 --------------------------------------------------------------------------------
 -- Auxiliary Enum and Bounded instances needed for FiniteNaperian instances of
