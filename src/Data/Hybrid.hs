@@ -2,7 +2,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -106,6 +105,11 @@ materialize (ZeroDim x) = generalize (Single x)
 materialize (OneDim x) = generalize (Nested $ Single x)
 materialize (TwoDim x) = generalize (Nested . Nested $ Single x)
 
+materialize' :: ForeignTensor ns a -> NestedVectors ns a
+materialize' (ZeroDim x) = Single x
+materialize' (OneDim x) = Nested $ Single x
+materialize' (TwoDim x) = Nested . Nested $ Single x
+
 pack :: forall a fs ns. (DType a, Transform ns fs, All FiniteNaperian fs) => FiniteHyper fs a -> ForeignTensor ns a
 pack fa = pack' $ concretize fa
   where
@@ -127,15 +131,14 @@ ap (Deferred f) x = f x
 -- Our hybrid data type which can be a foreign or native tensor. It achieves
 -- moral functorality by deferring fmap calls on a foreign tensor.
 data Dim (fs :: [Type -> Type]) a where
-  Foreign :: (All FiniteNaperian fs, Transform ns fs, ns ~ MapSize fs)
-          => ForeignTensor ns b -> Deferred b a -> Dim fs a
-  Native :: All FiniteNaperian fs => FiniteHyper fs a -> Dim fs a
+  Foreign :: (All FiniteNaperian fs, Transform (MapSize fs) fs)
+          => ForeignTensor (MapSize fs) b -> Deferred b a -> Dim fs a
+  Native :: (All FiniteNaperian fs, Transform (MapSize fs) fs)
+         => FiniteHyper fs a -> Dim fs a
 
 instance Show a => Show (Dim fs a) where
-  show (Foreign t f) = show ""
-  show (Native n) = case n of
-    Scalar x -> show x
-    Prism x -> ""
+  show (Foreign t f) = show $ fmap (ap f) (materialize' t)
+  show (Native n) = show (concretize n)
 
 -- Functor instance for the Hybrid type. Note this is not literally
 -- law-abiding as:
@@ -175,7 +178,7 @@ forceDeferred n@(Native _) = n
 packForeign :: forall a fs. DType a => Dim fs a -> Dim fs a
 packForeign t@(Foreign _ Id) = t
 packForeign (Foreign t f) = Foreign (pack @a @fs @(MapSize fs) . fmap (ap f) $ materialize t) Id
-packForeign (Native n) = Foreign (pack @a @fs @(MapSize fs) n) Id
+packForeign (Native n) = Foreign (pack n) Id
 
 -- If we have a Typeable, we can do type level equality and dispatch based on
 -- if a DType instance exists.
