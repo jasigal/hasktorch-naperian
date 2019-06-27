@@ -2,7 +2,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -13,6 +12,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Data.Hybrid where
 
@@ -20,10 +21,12 @@ import           GHC.TypeLits
 import           Data.Type.Bool
 import           Data.Proxy (Proxy(..))
 import           Data.Kind (Type, Constraint)
-import           Data.Type.Equality
+import           Data.Type.Equality (testEquality)
 import           Type.Reflection
 import           Data.Constraint
-import           Naperian
+import           Naperian hiding (Hyper(..))
+import           Data.Naperian
+import           Data.Functor.Classes
 
 -- DType singleton
 data DTypeRep a where
@@ -80,16 +83,40 @@ instance Functor (NestedVectors ns) where
   fmap f (Single a) = Single (f a)
   fmap f (Nested n) = Nested $ fmap (fmap f) n
 
--- Fake marshalling functions
-materialize :: ForeignTensor ns a -> NestedVectors ns a
-materialize (ZeroDim x) = Single x
-materialize (OneDim x) = Nested $ Single x
-materialize (TwoDim x) = Nested $ Nested $ Single x
+type family MapSize (fs :: [Type -> Type]) :: [Nat] where
+  MapSize '[]      = '[]
+  MapSize (f : fs) = Size f : MapSize fs
 
-pack :: DType a => NestedVectors ns a -> ForeignTensor ns a
-pack (Single x) = ZeroDim x
-pack (Nested (Single xs)) = OneDim xs
-pack (Nested (Nested (Single xss))) = TwoDim xss
+class Transform (ns :: [Nat]) (fs :: [Type -> Type]) | fs -> ns where
+  generalize :: All FiniteNaperian fs => NestedVectors ns a -> FiniteHyper fs a
+  concretize :: All FiniteNaperian fs => FiniteHyper fs a -> NestedVectors ns a
+
+instance Transform '[] '[] where
+  generalize (Single x) = Scalar x
+  concretize (Scalar x) = Single x
+
+instance (n ~ Size f, FiniteNaperian f, Transform ns fs) => Transform (n : ns) (f : fs) where
+  generalize (Nested v) = Prism (generalize (fmap fromVector v))
+  concretize (Prism fa) = Nested (concretize (fmap toVector fa))
+
+-- Fake marshalling functions
+materialize :: (Transform ns fs, All FiniteNaperian fs) => ForeignTensor ns a -> FiniteHyper fs a
+materialize (ZeroDim x) = generalize (Single x)
+materialize (OneDim x) = generalize (Nested $ Single x)
+materialize (TwoDim x) = generalize (Nested . Nested $ Single x)
+
+materialize' :: ForeignTensor ns a -> NestedVectors ns a
+materialize' (ZeroDim x) = Single x
+materialize' (OneDim x) = Nested $ Single x
+materialize' (TwoDim x) = Nested . Nested $ Single x
+
+pack :: forall a fs ns. (DType a, Transform ns fs, All FiniteNaperian fs) => FiniteHyper fs a -> ForeignTensor ns a
+pack fa = pack' $ concretize fa
+  where
+    pack' :: DType a => NestedVectors ns a -> ForeignTensor ns a
+    pack' (Single x) = ZeroDim x
+    pack' (Nested (Single xs)) = OneDim xs
+    pack' (Nested (Nested (Single xss))) = TwoDim xss
 
 -- Use to keep track of deferred calls to fmap with the ability to check if
 -- fmap has ever been called.
@@ -103,13 +130,15 @@ ap (Deferred f) x = f x
 
 -- Our hybrid data type which can be a foreign or native tensor. It achieves
 -- moral functorality by deferring fmap calls on a foreign tensor.
-data Dim (n :: [Nat]) a where
-  Foreign :: ForeignTensor ns b -> Deferred b a -> Dim ns a
-  Native :: NestedVectors ns a -> Dim ns a
+data Dim (fs :: [Type -> Type]) a where
+  Foreign :: (All FiniteNaperian fs, Transform (MapSize fs) fs)
+          => ForeignTensor (MapSize fs) b -> Deferred b a -> Dim fs a
+  Native :: (All FiniteNaperian fs, Transform (MapSize fs) fs)
+         => FiniteHyper fs a -> Dim fs a
 
-instance Show a => Show (Dim ns a) where
-  show (Foreign t f) = show (fmap (ap f) $ materialize t)
-  show (Native n) = show n
+instance Show a => Show (Dim fs a) where
+  show (Foreign t f) = show $ fmap (ap f) (materialize' t)
+  show (Native n) = show (concretize n)
 
 -- Functor instance for the Hybrid type. Note this is not literally
 -- law-abiding as:
@@ -129,31 +158,31 @@ isForeign (Foreign _ _) = True
 isForeign _ = False
 
 -- Turn a hybrid into a nested vectors, i.e. the corresponding actual functor.
-dimMaterialize :: Dim ns a -> NestedVectors ns a
+dimMaterialize :: Dim fs a -> FiniteHyper fs a
 dimMaterialize (Foreign t f) = fmap (ap f) $ materialize t
 dimMaterialize (Native n) = n
 
-x :: Dim '[2, 2] Int
+x :: Dim '[Vector 2, Vector 2] Int
 x = Foreign (TwoDim [[1 :: Int, 2], [3, 4]]) Id
 
-y :: Dim '[2, 2] Int
-y = Native $ Nested $ Nested $ Single [[1, 2], [3, 4]]
+y :: Dim '[Vector 2, Vector 2] Int
+y = Native $ Prism $ Prism $ Scalar [[1, 2], [3, 4]]
 
 -- Force any deferred calls, will marshal foreign to native if needed.
-forceDeferred :: Dim ns a -> Dim ns a
+forceDeferred :: Dim fs a -> Dim fs a
 forceDeferred t@(Foreign _ Id) = t
 forceDeferred (Foreign t f) = Native (fmap (ap f) $ materialize t)
 forceDeferred n@(Native _) = n
 
 -- Packs a native into a foreign
-packForeign :: DType a => Dim ns a -> Dim ns a
+packForeign :: forall a fs. DType a => Dim fs a -> Dim fs a
 packForeign t@(Foreign _ Id) = t
-packForeign (Foreign t f) = Foreign (pack . fmap (ap f) $ materialize t) Id
+packForeign (Foreign t f) = Foreign (pack @a @fs @(MapSize fs) . fmap (ap f) $ materialize t) Id
 packForeign (Native n) = Foreign (pack n) Id
 
 -- If we have a Typeable, we can do type level equality and dispatch based on
 -- if a DType instance exists.
-packOrForce :: forall a ns. Typeable a => Dim ns a -> Dim ns a
+packOrForce :: forall a fs. Typeable a => Dim fs a -> Dim fs a
 packOrForce d = case checkDType @a of
   Just Dict -> packForeign d
   Nothing -> forceDeferred d
@@ -161,7 +190,7 @@ packOrForce d = case checkDType @a of
 -- Modelling C++ calling a Haskell function. If a Haskell function takes and
 -- produces DTypes, we can call it from C++ (modelled here with tensorApply)
 -- to avoid marshalling.
-foreignCall :: forall a b ns. (Typeable a, Typeable b) => (a -> b) -> Dim ns a -> Dim ns b
+foreignCall :: forall a b fs. (Typeable a, Typeable b) => (a -> b) -> Dim fs a -> Dim fs b
 foreignCall f d = case (checkDType @a, checkDType @b) of
   (Just Dict, Just Dict) -> case packForeign d of
     (Foreign t Id) -> Foreign (tensorApply f t) Id
@@ -170,15 +199,15 @@ foreignCall f d = case (checkDType @a, checkDType @b) of
 
 -- As transpose is a natural transformation, it commutes with fmap and so we
 -- can apply it under all deferred fmaps.
-dimTranspose :: forall n m a. Dim '[n, m] a -> Dim '[m, n] a
+dimTranspose :: forall f g a. Dim '[f, g] a -> Dim '[g, f] a
 dimTranspose (Foreign t f) = Foreign (dynamicTranspose t) f
-dimTranspose (Native (Nested (Nested (Single vss)))) = Native
-  (Nested (Nested (Single (transpose vss))))
+dimTranspose (Native (Prism (Prism (Scalar vss)))) = Native
+  (Prism (Prism (Scalar (transpose vss))))
 
 -- For each Torch function, we can define a function like this which uses
 -- Torch's implementation if there are no deferred calls. We also could avoid
 -- writing a native instance by packing and then using the dynamic version.
-dimNegate :: forall a ns. (Num a, DType a) => Dim ns a -> Dim ns a
+dimNegate :: forall a fs. (Num a, DType a) => Dim fs a -> Dim fs a
 dimNegate (Foreign t Id) = case dtype @a of
   DTypeDouble -> Foreign (dynamicNegate @Double t) Id
   DTypeInt -> Foreign (dynamicNegate @Int t) Id
@@ -186,5 +215,5 @@ dimNegate (Foreign t (Deferred f)) = Foreign t (Deferred (negate . f))
 dimNegate (Native l) = Native (fmap negate l)
 
 -- Packs first to force the use of Torch's implementation.
-dimNegate' :: forall a ns. (Num a, DType a) => Dim ns a -> Dim ns a
+dimNegate' :: forall a fs. (Num a, DType a) => Dim fs a -> Dim fs a
 dimNegate' = dimNegate . packForeign
