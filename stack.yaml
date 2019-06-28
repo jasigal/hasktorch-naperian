@@ -34,6 +34,11 @@ resolver: lts-13.25
 #  - wai
 packages:
 - .
+- ../ffi-experimental/codegen
+- ../ffi-experimental/ffi
+- ../ffi-experimental/hasktorch
+- ../ffi-experimental/inline-c/inline-c-cpp
+- ../ffi-experimental/inline-c/inline-c
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)

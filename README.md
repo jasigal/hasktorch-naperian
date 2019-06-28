@@ -82,3 +82,12 @@ have to write our own version in the case of a Haskell type in `Dim`.
 For pointwise functions, we could possibly defer to Torch via FFI, but for
 functions like transpose and reductions, we would have to reimplement them.
 This is a very high cost.
+
+## Building with `ffi-experimental`
+
+Have `ffi-experimental` in the same parent directory as `hasktorch-naperian` and
+then run:
+
+```bash
+stack build --extra-lib-dirs="../ffi-experimental/deps/libtorch/lib/" --extra-lib-dirs="../ffi-experimental/deps/mklml/lib/" --extra-include-dirs="../ffi-experimental/deps/libtorch/include" --extra-include-dirs="../ffi-experimental/deps/libtorch/include/torch/csrc/api/include"
+```
