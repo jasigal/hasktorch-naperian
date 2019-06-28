@@ -251,7 +251,7 @@ type family Prod (ns :: [Nat]) :: Nat where
 
 data FiniteHyper :: [Type -> Type] -> Type -> Type where
   Scalar :: a -> FiniteHyper '[] a
-  Prism :: (FiniteNaperian f, All FiniteNaperian fs) => FiniteHyper fs (f a) -> FiniteHyper (f : fs) a
+  Prism :: FiniteNaperian f => FiniteHyper fs (f a) -> FiniteHyper (f : fs) a
 
 point' :: FiniteHyper '[] a -> a
 point' (Scalar a) = a
@@ -325,7 +325,6 @@ instance Naperian (FiniteHyper '[]) where
   positions = Scalar HNil
   lookup (Scalar x) _ = x
 instance ( FiniteNaperian f
-         , All FiniteNaperian fs
          , FiniteNaperian (FiniteHyper fs)
          , Log (FiniteHyper fs) ~ HList (MapLog fs)
          ) => Naperian (FiniteHyper (f : fs)) where
@@ -336,7 +335,6 @@ instance ( FiniteNaperian f
 instance FiniteNaperian (FiniteHyper '[]) where
   type Size (FiniteHyper '[]) = 1
 instance ( FiniteNaperian f
-         , All FiniteNaperian fs
          , FiniteNaperian (FiniteHyper fs)
          , Log (FiniteHyper fs) ~ HList (MapLog fs)
          ) => FiniteNaperian (FiniteHyper (f : fs)) where
@@ -345,7 +343,6 @@ instance ( FiniteNaperian f
 deriving via (WrappedNaperian (FiniteHyper '[])) instance Applicative (FiniteHyper '[])
 deriving via (WrappedNaperian (FiniteHyper (f : fs))) instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Applicative (FiniteHyper (f : fs))
@@ -353,7 +350,6 @@ deriving via (WrappedNaperian (FiniteHyper (f : fs))) instance
 deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Foldable (FiniteHyper '[])
 deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Foldable (FiniteHyper (f : fs))
@@ -362,7 +358,6 @@ instance Traversable (FiniteHyper '[]) where
   traverse = traverseFinNap
 instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Traversable (FiniteHyper (f : fs)) where
@@ -371,7 +366,6 @@ instance
 deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Dimension (FiniteHyper '[])
 deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Dimension (FiniteHyper (f : fs))
@@ -379,7 +373,6 @@ deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
 deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Eq1 (FiniteHyper '[])
 deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Eq1 (FiniteHyper (f : fs))
@@ -387,7 +380,6 @@ deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
 deriving via (WrappedFiniteNaperian (FiniteHyper '[])) instance Ord1 (FiniteHyper '[])
 deriving via (WrappedFiniteNaperian (FiniteHyper (f : fs))) instance
   ( FiniteNaperian f
-  , All FiniteNaperian fs
   , FiniteNaperian (FiniteHyper fs)
   , Log (FiniteHyper fs) ~ HList (MapLog fs)
   ) => Ord1 (FiniteHyper (f : fs))
