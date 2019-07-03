@@ -50,7 +50,8 @@ import           Data.Kind                      ( Type )
 --------------------------------------------------------------------------------
 
 -- | The class of Naperian functors which are represented by a finite type.
-class (Naperian f, Enum (Log f), Bounded (Log f), KnownNat (Size f)) => FiniteNaperian f where
+class (Naperian f, Enum (Log f), Bounded (Log f), KnownNat (Size f),
+       Applicative f, Traversable f) => FiniteNaperian f where
   -- | The static size of a FiniteNaperian functor as a type-level natural.
   type Size f :: Nat
 
@@ -245,10 +246,6 @@ type family All (pred :: a -> Constraint) (l :: [a]) :: Constraint where
 type family MapLog (l :: [a]) :: [b] where
   MapLog '[]      = '[]
   MapLog (x : xs) = Log x : MapLog xs
-
-type family Prod (ns :: [Nat]) :: Nat where
-  Prod '[]      = 0
-  Prod (n : ns) = n GHC.TypeLits.* Prod ns
 
 data FiniteHyper :: [Type -> Type] -> Type -> Type where
   Scalar :: a -> FiniteHyper '[] a

@@ -120,24 +120,26 @@ stackDynamic ts@(t : _) =
 stack :: KnownNat n => Vector n (S.Tensor dtype ns) -> S.Tensor dtype (n : ns)
 stack ts = UnsafeMkTensor . stackDynamic . fmap toDynamic $ toList ts
 
-dimUp :: (Log (FiniteHyper fs) ~ HList (MapLog fs), FiniteNaperian f)
-      => Dim (Size f : ns) fs dtype -> Dim ns (f : fs) dtype
-dimUp (Dim h) = Dim . Prism $ fmap (fromVector . unbind) h
+dimUp :: FiniteNaperian f => Dim (Size f : ns) fs dtype -> Dim ns (f : fs) dtype
+dimUp (Dim h) = case h of
+  Scalar _ -> Dim . Prism $ fmap (fromVector . unbind) h
+  Prism _ -> Dim . Prism $ fmap (fromVector . unbind) h
 
 dimDown :: Dim ns (f : fs) dtype -> Dim (Size f : ns) fs dtype
 dimDown (Dim (Prism h)) = Dim $ fmap (stack . toVector) h
 
 foldDimLayer
-  :: Foldable f
-  => (S.Tensor dtype ns -> S.Tensor dtype ns -> S.Tensor dtype ns)
+  :: (S.Tensor dtype ns -> S.Tensor dtype ns -> S.Tensor dtype ns)
   -> S.Tensor dtype ns
   -> Dim ns (f : fs) dtype
   -> Dim ns fs dtype
 foldDimLayer reduce seed (Dim (Prism h)) = Dim $ fmap (foldr reduce seed) h
 
 reshapeDim
-  :: Log (FiniteHyper fs) ~ HList (MapLog fs)
-  => Reshape f g
+  :: Reshape f g
   -> Dim ns (f : fs) dtype
   -> Dim ns (g : fs) dtype
-reshapeDim (Reshape nat) (Dim (Prism h)) = Dim (Prism (fmap nat h))
+reshapeDim (Reshape nat) (Dim (Prism h)) =
+  case h of
+    Scalar _ -> Dim (Prism (fmap nat h))
+    Prism _ -> Dim (Prism (fmap nat h))
