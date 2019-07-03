@@ -26,8 +26,21 @@ library
                      , ghc-typelits-knownnat
                      , constraints == 0.11
                      , hasktorch == 0.2.0.0
+                     , ffi == 0.1.0.0
   ghc-options:         -fplugin GHC.TypeLits.KnownNat.Solver
   default-language:    Haskell2010
+
+executable tensor-test
+  main-is:             Main.hs
+  build-depends:       base >= 4.7 && < 5
+                     , Naperian
+                     , ad
+                     , singleton-bool
+                     , ghc-typelits-knownnat
+                     , constraints == 0.11
+                     , hasktorch == 0.2.0.0
+                     , hasktorch-naperian
+  hs-source-dirs:      main
 
 source-repository head
   type:     git

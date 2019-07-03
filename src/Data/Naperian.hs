@@ -167,6 +167,7 @@ toVector fa =
     of
       Nothing  -> error "t-shaped data should have (Size t) elements."
       Just vec -> vec
+
 -- | We cannot use 'DerivingVia' to derive a 'Traversable' instance for finite
 -- Naperian functors. Essentially, 'DerivingVia' works using the 'Coercible'
 -- type class and its member @coerce@. Tyring to deriving 'Traversable' will
