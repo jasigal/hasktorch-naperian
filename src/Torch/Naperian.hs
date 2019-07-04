@@ -11,6 +11,8 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE NoStarIsType #-}
 
 module Torch.Naperian where
 
@@ -129,8 +131,24 @@ catDynamic ts@(t : _) =
   where
     compatible = all (== D.shape t) (fmap D.shape ts)
 
-cat :: KnownNat m => Vector m (S.Tensor dtype (n : ns)) -> S.Tensor dtype (m GHC.TypeLits.* n: ns)
+cat
+  :: KnownNat m
+  => Vector m (S.Tensor dtype (n : ns))
+  -> S.Tensor dtype (m * n: ns)
 cat ts = UnsafeMkTensor . catDynamic . fmap toDynamic $ toList ts
+
+chunkDynamic :: D.Tensor -> Int -> [D.Tensor]
+chunkDynamic t n = unsafePerformIO $ (cast3 ATen.chunk_tll) t n (0 :: Int)
+
+chunk
+  :: forall k m n ns dtype. (KnownNat k, (k * m) ~ n)
+  => S.Tensor dtype (n : ns)
+  -> Vector k (S.Tensor dtype (m : ns))
+chunk t = case fromList (fmap UnsafeMkTensor chunks) of
+  Nothing -> error "chunk error"
+  Just ts -> ts
+  where
+    chunks = chunkDynamic (toDynamic t) (natValI @k)
 
 dimUp :: FiniteNaperian f => Dim (Size f : ns) fs dtype -> Dim ns (f : fs) dtype
 dimUp (Dim h) = case h of
@@ -140,8 +158,16 @@ dimUp (Dim h) = case h of
 dimDown :: Dim ns (f : fs) dtype -> Dim (Size f : ns) fs dtype
 dimDown (Dim (Prism h)) = Dim $ fmap (stack . toVector) h
 
-dimCat :: Dim (n : ns) (f : fs) dtype -> Dim ((Size f) GHC.TypeLits.* n : ns) fs dtype
+dimCat :: Dim (n : ns) (f : fs) dtype -> Dim ((Size f) * n : ns) fs dtype
 dimCat (Dim (Prism h)) = Dim $ fmap (cat . toVector) h
+
+dimChunk
+  :: (FiniteNaperian f, ((Size f) * m) ~ n)
+  => Dim (n : ns) fs dtype
+  -> Dim (m : ns) (f : fs) dtype
+dimChunk (Dim h) = case h of
+  Scalar _ -> Dim . Prism $ fmap (fromVector . chunk) h
+  Prism _ -> Dim . Prism $ fmap (fromVector . chunk) h
 
 fmapDim
   :: (S.Tensor dtype ns -> S.Tensor dtype' ns')

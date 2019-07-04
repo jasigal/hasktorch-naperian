@@ -14,6 +14,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NoStarIsType #-}
 
 {-|
 Module      : Data.Naperian
@@ -89,7 +90,7 @@ instance (Naperian f, Naperian g) => Naperian (Compose f g) where
 
 -- | A 'Product' of finite Naperian functors is finite.
 instance (FiniteNaperian f, FiniteNaperian g) => FiniteNaperian (Compose f g) where
-  type Size (Compose f g) = Size f GHC.TypeLits.* Size g
+  type Size (Compose f g) = Size f * Size g
 
 --------------------------------------------------------------------------------
 -- Newtype wrappers for DerivingVia with Naperians.
@@ -337,7 +338,7 @@ instance ( FiniteNaperian f
          , FiniteNaperian (FiniteHyper fs)
          , Log (FiniteHyper fs) ~ HList (MapLog fs)
          ) => FiniteNaperian (FiniteHyper (f : fs)) where
-  type Size (FiniteHyper (f : fs)) = Size f GHC.TypeLits.* Size (FiniteHyper fs)
+  type Size (FiniteHyper (f : fs)) = Size f * Size (FiniteHyper fs)
 
 deriving via (WrappedNaperian (FiniteHyper fs)) instance
   Naperian (FiniteHyper fs) => Applicative (FiniteHyper fs)

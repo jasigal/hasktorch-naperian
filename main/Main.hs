@@ -38,3 +38,5 @@ main = do
     print (dimDown dim :: Dim '[3, 2] '[] TDT.Float)
     putStrLn "--- Dim cat ---"
     print (dimCat dim)
+    putStrLn "--- Dim chunk ---"
+    print (dimChunk dim :: Dim '[1] '[Vector 2, Vector 3] TDT.Float)
