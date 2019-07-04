@@ -34,12 +34,15 @@ newtype Nonuple a = Nonuple {unNonuple :: Compose Triple Triple a}
 instance Traversable Nonuple where
   traverse = traverseFinNap
 
-n :: Nonuple Int
-n = Nonuple (Compose (Triple x0 x1 x2))
+tt :: Triple (Triple Int)
+tt = Triple x0 x1 x2
  where
   x0 = Triple 0 1 2
   x1 = Triple 3 4 5
   x2 = Triple 6 7 8
+
+n :: Nonuple Int
+n = Nonuple (Compose tt)
 
 instance Naperian Triple where
   type Log Triple = Three
