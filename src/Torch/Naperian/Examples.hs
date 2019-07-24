@@ -19,6 +19,9 @@ import           Data.Functor.Classes
 import           Data.Maybe
 import           Numeric.AD
 
+import Torch.Static as S
+import Torch.DType as D
+
 data Full f g a = Full {func :: a -> a, weights :: Compose g f a, biases :: g a}
 
 layer :: (Num a, Dimension f, Dimension g) => Full f g a -> f a -> g a
