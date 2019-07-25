@@ -17,6 +17,7 @@ import           Naperian               hiding (Pair(..), Hyper(..))
 import qualified Naperian               as N
 import           Data.Naperian
 import           Torch.Naperian
+import           Data.Singletons
 import           Data.Functor.Compose
 import           Data.Functor.Product
 import           Data.Functor.Identity
@@ -196,4 +197,50 @@ lstm
   -> Dim '[dOut] '[Vector len] d
 lstm spec (Dim (Prism (Scalar inputs))) =
   let (_, outputs) = mapAccumR (lstmModule spec) 0 (fmap (Dim . Scalar) inputs)
+  in pushDim outputs
+
+leafLSTMModule
+  :: S.All KnownNat '[dIn, dOut]
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[] d
+  -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
+leafLSTMModule spec = lstmModule spec 0
+
+branchLSTMModule
+  :: S.All KnownNat '[dIn, dOut]
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[] d
+  -> Dim '[dOut] '[N.Pair] d
+  -> Dim '[dOut] '[N.Pair] d
+  -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
+branchLSTMModule LSTMSpec{..} xt prevl prevr = (cur, ht)
+  where
+    (cl, hl) = let Dim (Prism (Scalar (N.Pair a b))) = prevl
+               in (Dim $ Scalar a, Dim $ Scalar b)
+    (cr, hr) = let Dim (Prism (Scalar (N.Pair a b))) = prevr
+                in (Dim $ Scalar a, Dim $ Scalar b)
+    nn f (u, w, b) x h = liftUnaryOp f $ linear w x + linear u h + b
+
+    htilde = hl + hr
+    it = nn D.sigmoid input  xt htilde
+    fl = nn D.sigmoid forget xt hl
+    fr = nn D.sigmoid forget xt hr
+    ot = nn D.sigmoid output xt htilde
+    ut = nn D.tanh    update xt htilde
+    ct = it * ut + fl * cl + fr * cr
+    ht = ot * liftUnaryOp D.tanh ct
+
+    cur = let (Dim (Scalar vct), Dim (Scalar vht)) = (ct, ht)
+          in Dim . Prism . Scalar $ N.Pair vct vht
+
+childSumLSTM
+  :: (S.All KnownNat '[dIn, dOut], SingI s)
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[Tree' s] d
+  -> Dim '[dOut] '[Tree' s] d
+childSumLSTM spec (Dim (Prism (Scalar inputs))) =
+  let (_, outputs) = treeModule'
+                       (leafLSTMModule spec)
+                       (branchLSTMModule spec)
+                       (fmap (Dim . Scalar) inputs)
   in pushDim outputs
