@@ -132,3 +132,12 @@ treeModule
 treeModule leaf branch tree =
   let (b, ftree') = ixMapAccum (mkTreeSpec leaf branch) (treeToFix tree)
   in (b, fixToTree ftree')
+
+treeModule'
+  :: (a -> (b, c))
+  -> (a -> b -> b -> (b, c))
+  -> Tree' s a
+  -> (b, Tree' s c)
+treeModule' leaf branch tree =
+  let (b, ftree') = ixMapAccum (mkTreeSpec' leaf branch) (treeToFix' tree)
+  in (b, fixToTree' ftree')
