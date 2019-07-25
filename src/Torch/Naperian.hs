@@ -226,3 +226,6 @@ reshapeDim (Reshape nat) (Dim (Prism h)) =
   case h of
     Scalar _ -> Dim (Prism (fmap nat h))
     Prism _ -> Dim (Prism (fmap nat h))
+
+pushDim :: FiniteNaperian f => f (Dim ns '[] d) -> Dim ns '[f] d
+pushDim = Dim . Prism . Scalar . fmap (\(Dim (Scalar a)) -> a)
