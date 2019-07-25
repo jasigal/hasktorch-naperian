@@ -20,6 +20,7 @@ library
                      , Data.Naperian.Tree
                      , Torch.Naperian
                      , Torch.Naperian.Examples
+                     , Data.Indexed.Category
   build-depends:       base >= 4.7 && < 5
                      , Naperian
                      , ad

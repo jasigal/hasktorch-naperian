@@ -18,6 +18,8 @@ import           Data.Functor.Identity
 import           Data.Functor.Classes
 import           Data.Maybe
 import           Numeric.AD
+import           Data.Indexed.Category
+import           Data.Naperian.Tree
 
 import Torch.Static as S
 import Torch.DType as D
@@ -121,3 +123,21 @@ samples = Samples . Compose $ fmap f viota
 -- | Use 'fitModel' for 100 steps starting with the model @m = 0@ and @c = 0@.
 fittedModel :: LinearModel (Vector 1) Double
 fittedModel = fitModel samples (pure 0) !! 100
+
+treeModule
+  :: (a -> (b, c))
+  -> (b -> b -> b)
+  -> Tree s a
+  -> (b, Tree s c)
+treeModule leaf branch tree =
+  let (b, ftree') = ixMapAccum (mkTreeSpec leaf branch) (treeToFix tree)
+  in (b, fixToTree ftree')
+
+treeModule'
+  :: (a -> (b, c))
+  -> (a -> b -> b -> (b, c))
+  -> Tree' s a
+  -> (b, Tree' s c)
+treeModule' leaf branch tree =
+  let (b, ftree') = ixMapAccum (mkTreeSpec' leaf branch) (treeToFix' tree)
+  in (b, fixToTree' ftree')
