@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
@@ -12,6 +14,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Data.Naperian.Tree where
 
@@ -21,6 +24,10 @@ import           Data.Singletons
 import           Data.Singletons.TH
 import           Data.Singletons.TypeLits
 import           Data.Singletons.Prelude.Num
+import           Data.Indexed.Category
+import           Data.Kind
+import           GHC.Generics ((:*:)(..))
+import           Data.Functor.Const
 
 $(singletons [d|
   data TShape where
@@ -114,3 +121,34 @@ instance SingI s => Traversable (Tree s) where
     STOp sl sr -> case t of
       TBranch l r ->
         TBranch <$> withSingI sl (traverse f l) <*> withSingI sr (traverse f r)
+
+data TreeF a (f :: TShape -> Type) (s :: TShape) where
+  TLeafF :: a -> TreeF a f TUnit
+  TBranchF :: f l -> f r -> TreeF a f (TOp l r)
+
+treeToFix :: Tree s a -> IxFix TShape (TreeF a) s
+treeToFix (TLeaf a) = IxFix $ TLeafF a
+treeToFix (TBranch l r) = IxFix $ TBranchF (treeToFix l) (treeToFix r)
+
+fixToTree :: IxFix TShape (TreeF a) s -> Tree s a
+fixToTree (IxFix (TLeafF a)) = TLeaf a
+fixToTree (IxFix (TBranchF l r)) = TBranch (fixToTree l) (fixToTree r) 
+
+instance IxFunctor TShape (TreeF a) where
+  ifmap f = Ix $ \case
+    TLeafF a -> TLeafF a
+    TBranchF l r -> TBranchF (f `ixAp` l) (f `ixAp` r)
+
+instance IxMergeable TShape (TreeF a) (TreeF b) where
+  merge = Ix $ \case
+    TLeafF a :*: TLeafF b -> TLeafF b
+    TBranchF l r :*: TBranchF _ _ -> TBranchF l r
+
+mkTreeSpec
+  :: (a -> (b, c))
+  -> (b -> b -> b)
+  -> Ix TShape (TreeF a (Const b)) (Const b :*: TreeF c (Const ()))
+mkTreeSpec leaf branch = Ix $ \case
+  TLeafF a -> let (b, c) = leaf a in Const b :*: TLeafF c
+  TBranchF (Const bl) (Const br) ->
+    let b = branch bl br in Const b :*: TBranchF (Const ()) (Const ())
