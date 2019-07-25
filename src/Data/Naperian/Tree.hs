@@ -272,3 +272,23 @@ mkTreeSpec' leaf branch = Ix $ \case
   TLeafF' a -> let (b, c) = leaf a in Const b :*: TLeafF' c
   TBranchF' a (Const bl) (Const br) ->
     let (b, c) = branch a bl br in Const b :*: TBranchF' c (Const ()) (Const ())
+
+newtype Flip t a s = Flip {unFlip :: t s a}
+
+-- Turn child nodes into new nodes.
+treeToTree'
+  :: forall a s
+   . (a -> a -> a)
+  -> Tree s a
+  -> Tree' s a
+treeToTree' op t = unFlip $ icata alg `ixAp` treeToFix t
+  where
+    alg :: Ix TShape (TreeF a (Flip Tree' a)) (Flip Tree' a)
+    alg = Ix $ \case
+      TLeafF a -> Flip $ TLeaf' a
+      TBranchF (Flip tl) (Flip tr) -> Flip $ TBranch' (combine tl tr) tl tr
+    combine :: Tree' sl a -> Tree' sr a -> a
+    combine (TLeaf' al)       (TLeaf' ar)       = al `op` ar
+    combine (TLeaf' al)       (TBranch' ar _ _) = al `op` ar
+    combine (TBranch' al _ _) (TLeaf' ar)       = al `op` ar
+    combine (TBranch' al _ _) (TBranch' ar _ _) = al `op` ar
