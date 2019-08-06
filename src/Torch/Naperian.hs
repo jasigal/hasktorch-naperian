@@ -229,3 +229,14 @@ reshapeDim (Reshape nat) (Dim (Prism h)) =
 
 pushDim :: FiniteNaperian f => f (Dim ns '[] d) -> Dim ns '[f] d
 pushDim = Dim . Prism . Scalar . fmap (\(Dim (Scalar a)) -> a)
+
+pullDim :: Dim ns '[f] d -> f (Dim ns '[] d)
+pullDim (Dim (Prism (Scalar x))) = fmap (Dim . Scalar) x
+
+viaNaperian
+  :: forall f g ns ms fs gs d e
+   . (FiniteNaperian f)
+  => (Dim ns (f : fs) d -> Dim ms (g : gs) e)
+  -> Dim (Size f : ns) fs d
+  -> Dim (Size g : ms) gs e
+viaNaperian f = dimDown . f . dimUp

@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE KindSignatures #-}
@@ -215,10 +216,8 @@ branchLSTMModule
   -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
 branchLSTMModule LSTMSpec{..} xt prevl prevr = (cur, ht)
   where
-    (cl, hl) = let Dim (Prism (Scalar (N.Pair a b))) = prevl
-               in (Dim $ Scalar a, Dim $ Scalar b)
-    (cr, hr) = let Dim (Prism (Scalar (N.Pair a b))) = prevr
-                in (Dim $ Scalar a, Dim $ Scalar b)
+    N.Pair cl hl = pullDim prevl
+    N.Pair cr hr = pullDim prevr
     nn f (u, w, b) x h = liftUnaryOp f $ linear w x + linear u h + b
 
     htilde = hl + hr
@@ -230,17 +229,26 @@ branchLSTMModule LSTMSpec{..} xt prevl prevr = (cur, ht)
     ct = it * ut + fl * cl + fr * cr
     ht = ot * liftUnaryOp D.tanh ct
 
-    cur = let (Dim (Scalar vct), Dim (Scalar vht)) = (ct, ht)
-          in Dim . Prism . Scalar $ N.Pair vct vht
+    cur = pushDim $ N.Pair ct ht
 
 childSumLSTM
-  :: (S.All KnownNat '[dIn, dOut], SingI s)
+  :: forall s dIn dOut d
+   . (S.All KnownNat '[dIn, dOut, TSize' s], SingI s)
   => LSTMSpec dIn dOut d
   -> Dim '[dIn] '[Tree' s] d
   -> Dim '[dOut] '[Tree' s] d
-childSumLSTM spec (Dim (Prism (Scalar inputs))) =
+childSumLSTM spec inputs =
   let (_, outputs) = treeModule'
                        (leafLSTMModule spec)
                        (branchLSTMModule spec)
-                       (fmap (Dim . Scalar) inputs)
+                       (pullDim inputs)
   in pushDim outputs
+
+childSumLSTM'
+  :: forall dIn dOut s d
+   . (S.All KnownNat '[dIn, dOut, TSize' s], SingI s)
+  => Sing s
+  -> LSTMSpec dIn dOut d
+  -> Dim '[Size (Tree' s), dIn] '[] d
+  -> Dim '[Size (Tree' s), dOut] '[] d
+childSumLSTM' shape spec = viaNaperian (childSumLSTM @s spec)
