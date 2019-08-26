@@ -1,3 +1,7 @@
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -6,12 +10,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 
 module Torch.Naperian.Examples where
 
-import           Naperian                hiding ( Pair )
+import           Naperian               hiding (Pair(..), Hyper(..))
+import qualified Naperian               as N
 import           Data.Naperian
 import           Torch.Naperian
+import           Data.Singletons
 import           Data.Functor.Compose
 import           Data.Functor.Product
 import           Data.Functor.Identity
@@ -20,9 +27,12 @@ import           Data.Maybe
 import           Numeric.AD
 import           Data.Indexed.Category
 import           Data.Naperian.Tree
+import           GHC.TypeLits
+import           Data.Traversable
 
 import Torch.Static as S
-import Torch.DType as D
+import qualified Torch.Functions as D
+import Torch.DType as DT
 
 data Full f g a = Full {func :: a -> a, weights :: Compose g f a, biases :: g a}
 
@@ -141,3 +151,104 @@ treeModule'
 treeModule' leaf branch tree =
   let (b, ftree') = ixMapAccum (mkTreeSpec' leaf branch) (treeToFix' tree)
   in (b, fixToTree' ftree')
+
+data LSTMSpec (dIn :: Nat) (dOut :: Nat) d = LSTMSpec {
+  forget :: (Dim '[dOut, dOut] '[] d, Dim '[dOut, dIn] '[] d, Dim '[dOut] '[] d),
+  input  :: (Dim '[dOut, dOut] '[] d, Dim '[dOut, dIn] '[] d, Dim '[dOut] '[] d),
+  output :: (Dim '[dOut, dOut] '[] d, Dim '[dOut, dIn] '[] d, Dim '[dOut] '[] d),
+  update :: (Dim '[dOut, dOut] '[] d, Dim '[dOut, dIn] '[] d, Dim '[dOut] '[] d)
+}
+
+mv :: Tensor dtype '[n, k] -> Tensor dtype '[k] -> Tensor dtype '[n]
+mv a b = UnsafeMkTensor $ D.matmul (toDynamic a) (toDynamic b)
+
+linear
+  :: S.All KnownNat [n, m]
+  => Dim '[n, m] '[] d
+  -> Dim '[m] '[] d
+  -> Dim '[n] '[] d
+linear = liftA2Dim mv
+
+lstmModule
+ :: S.All KnownNat '[dIn, dOut]
+ => LSTMSpec dIn dOut d
+ -> Dim '[dOut] '[N.Pair] d
+ -> Dim '[dIn] '[] d
+ -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
+lstmModule LSTMSpec{..} prev xt = (cur, ht)
+  where
+    (ctp, htp) = let Dim (Prism (Scalar (N.Pair a b))) = prev
+                 in (Dim $ Scalar a, Dim $ Scalar b)
+    nn f (u, w, b) x h = liftUnaryOp f $ linear w x + linear u h + b
+
+    it = nn D.sigmoid input  xt htp
+    ft = nn D.sigmoid forget xt htp
+    ot = nn D.sigmoid output xt htp
+    ut = nn D.tanh    update xt htp
+    ct = it * ut + ft * ctp
+    ht = ot * liftUnaryOp D.tanh ct
+
+    cur = let (Dim (Scalar vct), Dim (Scalar vht)) = (ct, ht)
+          in Dim . Prism . Scalar $ N.Pair vct vht
+
+lstm
+  :: S.All KnownNat '[dIn, dOut, len]
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[Vector len] d
+  -> Dim '[dOut] '[Vector len] d
+lstm spec (Dim (Prism (Scalar inputs))) =
+  let (_, outputs) = mapAccumR (lstmModule spec) 0 (fmap (Dim . Scalar) inputs)
+  in pushDim outputs
+
+leafLSTMModule
+  :: S.All KnownNat '[dIn, dOut]
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[] d
+  -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
+leafLSTMModule spec = lstmModule spec 0
+
+branchLSTMModule
+  :: S.All KnownNat '[dIn, dOut]
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[] d
+  -> Dim '[dOut] '[N.Pair] d
+  -> Dim '[dOut] '[N.Pair] d
+  -> (Dim '[dOut] '[N.Pair] d, Dim '[dOut] '[] d)
+branchLSTMModule LSTMSpec{..} xt prevl prevr = (cur, ht)
+  where
+    N.Pair cl hl = pullDim prevl
+    N.Pair cr hr = pullDim prevr
+    nn f (u, w, b) x h = liftUnaryOp f $ linear w x + linear u h + b
+
+    htilde = hl + hr
+    it = nn D.sigmoid input  xt htilde
+    fl = nn D.sigmoid forget xt hl
+    fr = nn D.sigmoid forget xt hr
+    ot = nn D.sigmoid output xt htilde
+    ut = nn D.tanh    update xt htilde
+    ct = it * ut + fl * cl + fr * cr
+    ht = ot * liftUnaryOp D.tanh ct
+
+    cur = pushDim $ N.Pair ct ht
+
+childSumLSTM
+  :: forall s dIn dOut d
+   . (S.All KnownNat '[dIn, dOut, TSize' s], SingI s)
+  => LSTMSpec dIn dOut d
+  -> Dim '[dIn] '[Tree' s] d
+  -> Dim '[dOut] '[Tree' s] d
+childSumLSTM spec inputs =
+  let (_, outputs) = treeModule'
+                       (leafLSTMModule spec)
+                       (branchLSTMModule spec)
+                       (pullDim inputs)
+  in pushDim outputs
+
+childSumLSTM'
+  :: forall dIn dOut s d
+   . (S.All KnownNat '[dIn, dOut, TSize' s], SingI s)
+  => Sing s
+  -> LSTMSpec dIn dOut d
+  -> Dim '[Size (Tree' s), dIn] '[] d
+  -> Dim '[Size (Tree' s), dOut] '[] d
+childSumLSTM' shape spec = viaNaperian (childSumLSTM @s spec)

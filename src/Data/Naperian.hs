@@ -29,6 +29,7 @@ module Data.Naperian where
 import           Naperian                hiding ( Pair
                                                 , Hyper(..)
                                                 )
+import qualified Naperian                as N
 import qualified Prelude
 import           Prelude                 hiding ( lookup
                                                 , length
@@ -127,6 +128,9 @@ instance FiniteNaperian f => FiniteNaperian (WrappedFiniteNaperian f) where
 
 instance KnownNat n => FiniteNaperian (Vector n) where
   type Size (Vector n) = n
+
+instance FiniteNaperian N.Pair where
+  type Size N.Pair = 2
 
 -- | All finite Naperian functors can be giving a 'Foldable' instance by using
 -- the list instance.
