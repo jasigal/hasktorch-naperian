@@ -26,9 +26,8 @@ library
                      , ad
                      , singletons
                      , ghc-typelits-knownnat
-                     , constraints == 0.11
                      , hasktorch == 0.2.0.0
-                     , ffi == 0.1.0.0
+                     , libtorch-ffi
   ghc-options:         -fplugin GHC.TypeLits.KnownNat.Solver
   default-language:    Haskell2010
 
@@ -37,9 +36,7 @@ executable tensor-test
   build-depends:       base >= 4.7 && < 5
                      , Naperian
                      , ad
-                     , singleton-bool
                      , ghc-typelits-knownnat
-                     , constraints == 0.11
                      , hasktorch == 0.2.0.0
                      , hasktorch-naperian
   hs-source-dirs:      main

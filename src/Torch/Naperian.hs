@@ -38,7 +38,8 @@ import qualified ATen.Managed.Cast             as ATen
 import           ATen.Cast
 
 data Reshape f g where
-  Reshape :: (FiniteNaperian f, FiniteNaperian g) => (forall a. f a -> g a) -> Reshape f g
+  Reshape :: (FiniteNaperian f, FiniteNaperian g)
+          => (forall a. f a -> g a) -> Reshape f g
 
 activation :: (Num a, Functor f) => (a -> a) -> f a -> f a
 activation = fmap
@@ -70,7 +71,7 @@ convolve weights spec input = window (inner weights) spec input
 full :: (Num a, Dimension f, Functor g) => f a -> Compose g f a -> g a
 full input weights = inner input <$> getCompose weights
 
-data Dim (ns :: [Nat]) (fs :: [Type -> Type]) (dtype :: TDT.DType) where
+data Dim (ns :: [Nat]) (fs :: [Type -> Type]) dtype where
    Dim :: FiniteNaperian (FiniteHyper fs)
        => FiniteHyper fs (S.Tensor dtype ns) -> Dim ns fs dtype
 

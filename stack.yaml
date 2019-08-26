@@ -8,20 +8,16 @@ extra-deps:
     commit: 54d873ffe99de865ca34e6bb3b92736e29e01619
     size: 7146
     sha256: b656cac6fbed9982514675ff1780c50e261a53673d25c4d3ed7b6957f334b6ea
-  - extensible-0.5.1@sha256:27cb6a6c9101c2d146fa227d09ae683d02bcd723f30a4f4e7e82d6b1c5733c23,2846
-  - membership-0@sha256:3a11d8fd53cb1a76bb9273e6c929bbf9d649f109714bf487abb3143be04ddc81,995
-  - constraints-0.11
-  - categories-1.0.7@sha256:e707f8ac06eac755cb508aa67de64ab2e33ce1c54aebb6f43f64c615aa5234f6,1636
-  - ../ffi-experimental/codegen
-  - ../ffi-experimental/ffi
-  - ../ffi-experimental/hasktorch
-  - ../ffi-experimental/inline-c/inline-c-cpp
-  - ../ffi-experimental/inline-c/inline-c
+  - ../hasktorch/codegen
+  - ../hasktorch/libtorch-ffi
+  - ../hasktorch/hasktorch
+  - ../hasktorch/inline-c/inline-c-cpp
+  - ../hasktorch/inline-c/inline-c
 
 extra-include-dirs:
-  - ../ffi-experimental/deps/libtorch/include
-  - ../ffi-experimental/deps/libtorch/include/torch/csrc/api/include
+  - ../hasktorch/deps/libtorch/include
+  - ../hasktorch/deps/libtorch/include/torch/csrc/api/include
 
 extra-lib-dirs: 
-  - ../ffi-experimental/deps/libtorch/lib/
-  - ../ffi-experimental/deps/mklml/lib/
+  - ../hasktorch/deps/libtorch/lib/
+  - ../hasktorch/deps/mklml/lib/
